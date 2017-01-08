@@ -34,7 +34,7 @@ group :production do
   gem 'twitter'
   gem 'hipchat'
   gem 'flowdock'
-  gem 'json'
+  gem 'json', '2.0.2'
   gem 'dogapi'
   gem 'aws-ses'
   gem 'qiniu', '~> 6.5.1'
