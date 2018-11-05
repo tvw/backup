@@ -1,4 +1,5 @@
 require "spec_helper"
+require "tmpdir"
 
 module Backup
   describe Database::MySQL do
@@ -13,6 +14,8 @@ module Backup
         .with(:cat).returns("cat")
       Database::MySQL.any_instance.stubs(:utility)
         .with(:innobackupex).returns("innobackupex")
+      Database::MySQL.any_instance.stubs(:utility)
+        .with(:xtrabackup).returns("xtrabackup")
       Database::MySQL.any_instance.stubs(:utility)
         .with(:tar).returns("tar")
     end
@@ -199,6 +202,87 @@ module Backup
 
             pipeline.expects(:<<).in_sequence(s).with(
               "cat > '/tmp/trigger/databases/MySQL.tar.cmp_ext'"
+            )
+
+            pipeline.expects(:run).in_sequence(s)
+            pipeline.expects(:success?).in_sequence(s).returns(true)
+
+            db.expects(:log!).in_sequence(s).with(:finished)
+
+            db.perform!
+          end
+        end # context 'without a compressor'
+
+        context "when the pipeline fails" do
+          before do
+            Pipeline.any_instance.stubs(:success?).returns(false)
+            Pipeline.any_instance.stubs(:error_messages).returns("error messages")
+          end
+
+          it "raises an error" do
+            expect do
+              db.perform!
+            end.to raise_error(Database::MySQL::Error) { |err|
+              expect(err.message).to eq(
+                "Database::MySQL::Error: Dump Failed!\n  error messages"
+              )
+            }
+          end
+        end # context 'when the pipeline fails'
+      end # describe '#perform!'
+    end # context 'using alternative engine (innobackupex)'
+
+    context "using alternative engine (xtrabackup)" do
+      before do
+        db.backup_engine = :xtrabackup
+      end
+
+      describe "#perform!" do
+        let(:pipeline) { mock }
+        let(:compressor) { mock }
+
+        before do
+          db.stubs(:xtrabackup).returns("xtrabackup_command")
+          db.stubs(:dump_path).returns("/tmp/trigger/databases")
+
+          db.expects(:log!).in_sequence(s).with(:started)
+          db.expects(:prepare!).in_sequence(s)
+        end
+
+        context "without a compressor" do
+          it "packages the dump without compression" do
+            Pipeline.expects(:new).in_sequence(s).returns(pipeline)
+
+            pipeline.expects(:<<).in_sequence(s).with("xtrabackup_command")
+
+            pipeline.expects(:<<).in_sequence(s).with(
+              "cat > '/tmp/trigger/databases/MySQL.xbstream'"
+            )
+
+            pipeline.expects(:run).in_sequence(s)
+            pipeline.expects(:success?).in_sequence(s).returns(true)
+
+            db.expects(:log!).in_sequence(s).with(:finished)
+
+            db.perform!
+          end
+        end # context 'without a compressor'
+
+        context "with a compressor" do
+          before do
+            model.stubs(:compressor).returns(compressor)
+            compressor.stubs(:compress_with).yields("cmp_cmd", ".cmp_ext")
+          end
+
+          it "packages the dump with compression" do
+            Pipeline.expects(:new).in_sequence(s).returns(pipeline)
+
+            pipeline.expects(:<<).in_sequence(s).with("xtrabackup_command")
+
+            pipeline.expects(:<<).in_sequence(s).with("cmp_cmd")
+
+            pipeline.expects(:<<).in_sequence(s).with(
+              "cat > '/tmp/trigger/databases/MySQL.xbstream.cmp_ext'"
             )
 
             pipeline.expects(:run).in_sequence(s)
@@ -452,6 +536,135 @@ module Backup
           )
         end
       end
-    end
+    end # #innobackupex
+
+    describe "#xtrabackup" do
+      describe "doing a full backup" do
+        it "builds command to create backup" do
+          expect(db.send(:xtrabackup).split.join(" ")).to eq(
+            "xtrabackup --backup --stream=xbstream 2> /dev/null"
+          )
+        end
+
+        context "with verbose option enabled" do
+          before do
+            db.verbose = true
+          end
+
+          it "builds command to create backup" do
+            expect(db.send(:xtrabackup).split.join(" ")).to eq(
+              "xtrabackup --backup --stream=xbstream"
+            )
+          end
+        end
+      end
+
+      describe "doing a full backup in order to make incremental backups" do
+        it "builds command to create backup" do
+          Dir.mktmpdir do |lsndir|
+            db.extra_lsndir = lsndir
+
+            expect(db.send(:xtrabackup).split.join(" ")).to eq(
+              "xtrabackup --backup --stream=xbstream --extra-lsndir=\"#{lsndir}\" " \
+              "2> /dev/null"
+            )
+          end
+        end
+
+        describe "when directory set with option extra_lsndir does not exist" do
+          it "raises an error" do
+            expect do
+              db.extra_lsndir = "/some/path/that/does/not/exist/at/all"
+              db.send(:xtrabackup)
+            end.to raise_error(Database::MySQL::Error) { |err|
+              expect(err.message).to eq(
+                "Database::MySQL::Error: Directory \"/some/path/that/does/not/exist/at/all\" " \
+                "for option extra_lsndir does not exist."
+              )
+            }
+          end
+        end
+
+        context "with verbose option enabled" do
+          before do
+            db.verbose = true
+          end
+
+          it "builds command to create backup" do
+            Dir.mktmpdir do |lsndir|
+              db.extra_lsndir = lsndir
+
+              expect(db.send(:xtrabackup).split.join(" ")).to eq(
+                "xtrabackup --backup --stream=xbstream --extra-lsndir=\"#{lsndir}\""
+              )
+            end
+          end
+        end
+      end
+
+      describe "doing incremental backups" do
+        before do
+          db.incremental_backup = true
+        end
+
+        it "builds command to create backup" do
+          Dir.mktmpdir do |lsndir|
+            db.extra_lsndir = lsndir
+            File.write(File.join(lsndir, "xtrabackup_checkpoints"), "")
+
+            expect(db.send(:xtrabackup).split.join(" ")).to eq(
+              "xtrabackup --backup --stream=xbstream --extra-lsndir=\"#{lsndir}\" " \
+              "--incremental-basedir=\"#{lsndir}\" 2> /dev/null"
+            )
+          end
+        end
+
+        describe "when option extra_lsndir is not defined" do
+          it "raises an error" do
+            expect do
+              db.send(:xtrabackup)
+            end.to raise_error(Database::MySQL::Error) { |err|
+              expect(err.message).to eq(
+                "Database::MySQL::Error: Option extra_lsndir missing for xtrabackup incremental backups."
+              )
+            }
+          end
+        end
+
+        describe "when checkpoint in directory set with option extra_lsndir does not exist" do
+          it "raises an error" do
+            expect do
+              db.extra_lsndir = "/some/path/that/does/not/exist/at/all"
+              db.send(:xtrabackup)
+            end.to raise_error(Database::MySQL::Error) { |err|
+              expect(err.message).to eq(
+                "Database::MySQL::Error: Checkpoint missing from last backup in " \
+                "\"/some/path/that/does/not/exist/at/all\": " \
+                "(Forgot to make a full backup or to set option extra_lsndir also for " \
+                "full backups?)"
+              )
+            }
+          end
+        end
+
+        context "with verbose option enabled" do
+          before do
+            db.verbose = true
+          end
+
+          it "builds command to create backup" do
+            Dir.mktmpdir do |lsndir|
+              db.extra_lsndir = lsndir
+              File.write(File.join(lsndir, "xtrabackup_checkpoints"), "")
+
+              expect(db.send(:xtrabackup).split.join(" ")).to eq(
+                "xtrabackup --backup --stream=xbstream --extra-lsndir=\"#{lsndir}\" " \
+                "--incremental-basedir=\"#{lsndir}\""
+              )
+            end
+          end
+        end
+      end
+    end # #xtrabackup
   end
 end
