@@ -95,6 +95,7 @@ module Backup
     autoload :Base,    File.join(ENCRYPTOR_PATH, "base")
     autoload :OpenSSL, File.join(ENCRYPTOR_PATH, "open_ssl")
     autoload :GPG,     File.join(ENCRYPTOR_PATH, "gpg")
+    autoload :Age,     File.join(ENCRYPTOR_PATH, "age")
   end
 
   ##

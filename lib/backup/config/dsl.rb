@@ -32,7 +32,7 @@ module Backup
               # Compressors
               ["Gzip", "Bzip2", "Custom"],
               # Encryptors
-              ["OpenSSL", "GPG"],
+              ["OpenSSL", "GPG", "Age"],
               # Syncers
               [
                 { "Cloud" => ["CloudFiles", "S3"] },
