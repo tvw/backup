@@ -414,7 +414,7 @@ module Backup
             mail.cc                   = "my.cc.email@gmail.com"
             mail.bcc                  = "my.bcc.email@gmail.com"
             mail.reply_to             = "my.reply_to.email@gmail.com"
-            mail.sendmail_args        = "-i -t -X/tmp/traffic.log"
+            mail.sendmail_args        = ["-i", "-t", "-X/tmp/traffic.log"]
           end
         end
 
@@ -430,7 +430,7 @@ module Backup
 
           settings = email.delivery_method.settings
           expect(settings[:location]).to eq "/path/to/sendmail"
-          expect(settings[:arguments]).to eq "-i -t -X/tmp/traffic.log"
+          expect(settings[:arguments]).to eq ["-i", "-t", "-X/tmp/traffic.log"]
         end
       end
 
@@ -443,7 +443,7 @@ module Backup
             mail.cc                   = "my.cc.email@gmail.com"
             mail.bcc                  = "my.bcc.email@gmail.com"
             mail.reply_to             = "my.reply_to.email@gmail.com"
-            mail.exim_args            = "-i -t -X/tmp/traffic.log"
+            mail.exim_args            = ["-i", "-t", "-X/tmp/traffic.log"]
           end
         end
 
@@ -459,7 +459,7 @@ module Backup
 
           settings = email.delivery_method.settings
           expect(settings[:location]).to eq "/path/to/exim"
-          expect(settings[:arguments]).to eq "-i -t -X/tmp/traffic.log"
+          expect(settings[:arguments]).to eq ["-i", "-t", "-X/tmp/traffic.log"]
         end
       end
 
