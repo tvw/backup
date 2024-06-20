@@ -342,7 +342,7 @@ module Backup
     map "-v" => :version
     desc "version", "Display installed Backup version"
     def version
-      puts "Backup #{Backup::VERSION}"
+      puts "Backup #{Backup::VERSION} (tvw)"
     end
 
     # This is to avoid Thor's warnings when stubbing methods on the Thor class.

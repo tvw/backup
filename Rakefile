@@ -119,3 +119,13 @@ namespace :docker do
     sh "docker-compose run --rm ruby_backup_tester #{command}"
   end
 end
+
+namespace :gem do
+  desc "Build gem"
+  task :build do
+    load version_file
+    mkdir_p "pkg"
+    gemfile = "pkg/tvw-backup-#{current_version}.gem"
+    sh %{gem build tvw-backup.gemspec --output #{gemfile}}
+  end
+end

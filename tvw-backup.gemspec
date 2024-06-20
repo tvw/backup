@@ -3,7 +3,7 @@
 require File.expand_path("lib/backup/version")
 
 Gem::Specification.new do |gem|
-  gem.name        = "backup"
+  gem.name        = "tvw-backup"
   gem.version     = Backup::VERSION
   gem.authors     = "Michael van Rooijen"
   gem.email       = "meskyanichi@gmail.com"
